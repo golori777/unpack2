@@ -123,7 +123,7 @@ fun HomeScreen(navController: NavHostController) {
                                 .makeText(
                                     context,
                                     "Id is $memoId",
-                                    Toast.LENGTH_SHORT
+                                    Toast.LENGTH_SHORT 
                                 )
                                 .show()
                         }
