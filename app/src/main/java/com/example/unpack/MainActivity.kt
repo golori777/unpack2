@@ -1,7 +1,10 @@
 package com.example.unpack
 
+import android.icu.text.CaseMap
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -12,24 +15,29 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.core.os.bundleOf
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.room.Room
-import com.example.unpack.MainActivity.Companion.currentText
+//import com.example.unpack.MainActivity.Companion.currentText
 import com.example.unpack.MainActivity.Companion.dao
+import com.example.unpack.MainActivity.Companion.memoId
 import com.example.unpack.database.MemoDao
 import com.example.unpack.database.Memo
 import com.example.unpack.database.UnpackDatabase
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.properties.Delegates
 
 
 class MainActivity : ComponentActivity() {
@@ -37,22 +45,26 @@ class MainActivity : ComponentActivity() {
     companion object {
         lateinit var db : UnpackDatabase
         lateinit var dao : MemoDao
-        lateinit var currentText : String
+        var memoId by Delegates.notNull<Int>()
+//        lateinit var currentText : String
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        db = Room.databaseBuilder(this.applicationContext, UnpackDatabase::class.java, "unpack-database").allowMainThreadQueries().build()
+        dao = db.memoDao()
+//        currentText = ""
+        memoId = 0
         setContent {
-            db = Room.databaseBuilder(this.applicationContext, UnpackDatabase::class.java, "unpack-database").allowMainThreadQueries().build()
-            dao = db.memoDao()
-            currentText = ""
             val navController = rememberNavController()
             Scaffold(
-                topBar = { TopAppBar() },
+//                topBar = { TopAppBarBase() },
             ) {
                 NavigationComponent(navController)
             }
         }
+    }
+    override fun onBackPressed() {
     }
 }
 
@@ -66,42 +78,64 @@ fun NavigationComponent(navController: NavHostController) {
         composable("home") {
             HomeScreen(navController)
         }
-        composable("details") {
-            DetailScreen(navController)
+        composable(
+            "details/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.StringType })
+        ) {
+            it.arguments?.getString("id")?.let { it
+                DetailScreen(navController, it)
+            }
         }
     }
 }
+
 
 // ホーム画面
 @Composable
 fun HomeScreen(navController: NavHostController) {
 
     var memos = dao.getAllMemos()
+    val context = LocalContext.current
 
     Scaffold(
-        floatingActionButton = { AddFab(navController) }
+        floatingActionButton = { AddFab(navController) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(text = "unpack")
+                },
+            )
+        }
     ) {
         Column(
-            modifier = Modifier
+            Modifier
                 .verticalScroll(rememberScrollState()) // スクロール設定
         ) {
             memos.forEach{ memo ->
                 Card(
-                    modifier = Modifier.border(BorderStroke(1.dp, Color.LightGray), RoundedCornerShape(10.dp))
+                    Modifier
+                        .border(BorderStroke(1.dp, Color.LightGray), RoundedCornerShape(10.dp))
+                        .clickable {
+                            memoId = memo.id
+                            navController.navigate("details/$memoId")
+                            Toast
+                                .makeText(
+                                    context,
+                                    "Id is $memoId",
+                                    Toast.LENGTH_SHORT
+                                )
+                                .show()
+                        }
                 ) {
                     Row(
                         Modifier
                             .padding(8.dp)
                     ) {
-                        Icon(Icons.Filled.Favorite, contentDescription = "お気に入り")
-                        Image(
-                            modifier = Modifier.size(width = 100.dp, height = 100.dp),
-                            painter = painterResource(R.drawable.ap_parrot),
-                            contentDescription = "Contact profile picture",
-                        )
                         Column() {
                             Text(
-                                modifier = Modifier.fillMaxWidth().size(width = 100.dp, height = 50.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .size(width = 100.dp, height = 50.dp),
                                 text = memo.text
                             )
                             Text(
@@ -118,18 +152,77 @@ fun HomeScreen(navController: NavHostController) {
 
 // テキスト編集画面
 @Composable
-fun DetailScreen(navController: NavHostController) {
+fun DetailScreen(navController: NavHostController, id: String) {
+    var localText by remember { mutableStateOf("") }
+    if (id != null) {
+        val memo = dao.findById(id)
+        memo?.text?.let {
+            localText = it
+        }
+    }
+
     Scaffold(
-        floatingActionButton = { SaveFab(navController) }
+//        floatingActionButton = {
+//            Row(modifier = Modifier.padding(8.dp)) {
+//                SaveFab(navController)
+//                BackdFab(navController)
+//                DeleteFab(navController)
+//            }
+//        },
+        topBar = {
+            TopAppBar {
+                IconButton(onClick = {
+                    val df = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+                    val date = Date()
+
+                    if (localText != "") {
+                        if (memoId == 0) {
+                            dao.insert(
+                                Memo(
+                                    id = 0,
+                                    text = localText,
+                                    updateDate = df.format(date),
+                                )
+                            )
+                        } else {
+                            dao.update(
+                                Memo(
+                                    id = memoId,
+                                    text = localText,
+                                    updateDate = df.format(date),
+                                )
+                            )
+                        }
+                    }
+                    memoId = 0
+//                    currentText = ""
+                    navController.navigate("home")
+                }) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = "戻る（保存）")
+                }
+                Text(text = "memo detail")
+                IconButton(
+                    onClick = {
+                        if (memoId > 0) {
+                            dao.deleteById(memoId)
+                        }
+                        navController.navigate("home")
+                    },
+//                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = "削除")
+                }
+            }
+        }
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            var name by remember { mutableStateOf("") }
+//            currentText = text
 
             OutlinedTextField(
-                value = name,
+                value = localText,
                 onValueChange = {
-                    name = it
-                    currentText = name
+                    localText = it
+//                    currentText = localText
                                 },
                 label = { Text("Memo") },
                 modifier = Modifier
@@ -140,9 +233,8 @@ fun DetailScreen(navController: NavHostController) {
     }
 }
 
-
 @Composable
-fun TopAppBar() {
+fun TopAppBarBase() {
     TopAppBar(
         title = {
             Text(text = "unpack")
@@ -154,7 +246,7 @@ fun TopAppBar() {
 @Composable
 fun AddFab(navController: NavHostController) {
     FloatingActionButton(onClick = {
-        navController.navigate("details")
+        navController.navigate("details/" + null)
     }) {
         Icon(Icons.Filled.Add, contentDescription = "追加")
     }
@@ -163,32 +255,58 @@ fun AddFab(navController: NavHostController) {
 // 保存ボタン
 @Composable
 fun SaveFab(navController: NavHostController) {
-    FloatingActionButton(onClick = {
-        val df = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-        val date = Date()
-        dao.insert(Memo(
-            id = 0,
-            text = currentText,
-            updateDate = df.format(date),
-        ))
-        currentText = ""
-        navController.navigate("home")
-    }) {
+    FloatingActionButton(
+        onClick = {
+            val df = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+            val date = Date()
+
+//            if (memoId == 0) {
+//                dao.insert(Memo(
+//                    id = 0,
+//                    text = currentText,
+//                    updateDate = df.format(date),
+//                ))
+//            } else {
+//                dao.update(
+//                    Memo(
+//                        id = memoId,
+//                        text = currentText,
+//                        updateDate = df.format(date),
+//                    )
+//                )
+//            }
+//            memoId = 0
+//            currentText = ""
+            navController.navigate("home")
+        }
+    ) {
         Icon(Icons.Filled.Check, contentDescription = "保存")
     }
 }
 
-// 一覧表示
+// 戻るボタン
 @Composable
-fun ListDisplay(name: String, ary : List<String>) {
-    Column() {
-        ary.forEach{ ary ->
-            dispRow(name = ary)
-            Divider()
-        }
+fun BackdFab(navController: NavHostController) {
+    FloatingActionButton(onClick = {
+        navController.navigate("home")
+    }) {
+        Icon(Icons.Filled.ArrowBack, contentDescription = "保存")
     }
-
 }
+
+// 削除ボタン
+@Composable
+fun DeleteFab(navController: NavHostController) {
+    FloatingActionButton(onClick = {
+        if (memoId > 0) {
+            dao.deleteById(memoId)
+        }
+        navController.navigate("home")
+    }) {
+        Icon(Icons.Filled.Delete, contentDescription = "保存")
+    }
+}
+
 
 // レコード表示
 @Composable
@@ -201,11 +319,6 @@ fun dispRow(name: String) {
                 .size(width = screenWidth, height = 100.dp)
                 .padding(8.dp)
         ) {
-            Icon(Icons.Filled.Favorite, contentDescription = "お気に入り")
-            Image(
-                painter = painterResource(R.drawable.ap_parrot),
-                contentDescription = "Contact profile picture",
-            )
             Text(text = "Hello $name!")
         }
     }
@@ -215,6 +328,6 @@ fun dispRow(name: String) {
 @Composable
 fun DefaultPreview() {
     val navController = rememberNavController()
-    DetailScreen(navController)
+    DetailScreen(navController, "1")
 }
 
