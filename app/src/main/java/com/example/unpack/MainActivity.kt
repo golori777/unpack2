@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.os.bundleOf
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -136,7 +137,9 @@ fun HomeScreen(navController: NavHostController) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .size(width = 100.dp, height = 50.dp),
-                                text = memo.text
+                                text = memo.text,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
 //                                modifier = Modifier.size(width = 0.dp, height = 20.dp).fillMaxWidth(),
